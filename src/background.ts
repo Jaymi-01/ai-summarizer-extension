@@ -41,9 +41,10 @@ async function handleSummarization(payload: { title: string; text: string; url: 
 
   // 1. Check Cache
   const cacheKey = `summary_${url}`;
-  let cached: Record<string, SummaryData> | null = null;
+  let cached: { [key: string]: SummaryData } | null = null;
   try {
-    cached = await chrome.storage.local.get(cacheKey);
+    const result = await chrome.storage.local.get([cacheKey]);
+    cached = result as { [key: string]: SummaryData };
   } catch (error) {
     console.error('Cache Retrieval Error:', error);
     // Continue without cache
