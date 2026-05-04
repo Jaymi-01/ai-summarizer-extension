@@ -11,6 +11,20 @@ interface SummaryData {
   readingTime: string;
 }
 
+interface ExtractionResult {
+  title: string;
+  textContent: string;
+  excerpt: string;
+  siteName: string;
+  length: number;
+  error?: string;
+}
+
+interface SummaryResponse extends Partial<SummaryData> {
+  error?: string;
+  cause?: string;
+}
+
 function App() {
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<SummaryData | null>(null);
@@ -23,7 +37,7 @@ function App() {
       if (tab?.url) {
         setPageTitle(tab.title || '');
         const cacheKey = `summary_${tab.url}`;
-        chrome.storage.local.get([cacheKey], (result: { [key: string]: any }) => {
+        chrome.storage.local.get([cacheKey], (result: Record<string, SummaryData>) => {
           if (result[cacheKey]) {
             setSummary(result[cacheKey]);
           }
@@ -47,7 +61,7 @@ function App() {
       if (!tab?.id) throw new Error('No active browser tab detected.');
 
       // 1. Execute Content Script
-      let results;
+      let results: chrome.scripting.InjectionResult<ExtractionResult>[];
       try {
         results = await chrome.scripting.executeScript({
           target: { tabId: tab.id },
@@ -62,7 +76,7 @@ function App() {
         throw new Error('Content extraction returned an empty result.', { cause: new Error('Script execution returned undefined/null results array.') });
       }
 
-      const extractionResult = results[0].result as any;
+      const extractionResult = results[0].result;
       if (extractionResult.error) {
         throw new Error('The extraction script encountered an issue with the page content.', { cause: new Error(extractionResult.error) });
       }
@@ -75,7 +89,7 @@ function App() {
           text: extractionResult.textContent,
           url: tab.url
         }
-      }, (response: any) => {
+      }, (response: SummaryResponse) => {
         if (chrome.runtime.lastError) {
           setError('Background communication error.');
           console.error('Runtime error:', chrome.runtime.lastError);
@@ -89,8 +103,8 @@ function App() {
             console.warn('Analysis Cause:', response.cause);
           }
           setError(response.error);
-        } else {
-          setSummary(response);
+        } else if (response && response.bulletPoints && response.keyInsights && response.readingTime) {
+          setSummary(response as SummaryData);
         }
         setLoading(false);
       });
