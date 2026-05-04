@@ -60,26 +60,39 @@ function App() {
       const tab = await getCurrentTab();
       if (!tab?.id) throw new Error('No active browser tab detected.');
 
+      // Setup a one-time listener for the content script result
+      const extractionPromise = new Promise<ExtractionResult>((resolve, reject) => {
+        const listener = (message: any) => {
+          if (message.type === 'CONTENT_EXTRACTED') {
+            chrome.runtime.onMessage.removeListener(listener);
+            if (message.payload.error) {
+              reject(new Error(message.payload.error));
+            } else {
+              resolve(message.payload);
+            }
+          }
+        };
+        chrome.runtime.onMessage.addListener(listener);
+        
+        // Timeout after 5 seconds if the script doesn't respond
+        setTimeout(() => {
+          chrome.runtime.onMessage.removeListener(listener);
+          reject(new Error('Page analysis timed out. Is the page still loading?'));
+        }, 5000);
+      });
+
       // 1. Execute Content Script
-      let results: chrome.scripting.InjectionResult<ExtractionResult>[];
       try {
-        results = await chrome.scripting.executeScript({
+        await chrome.scripting.executeScript({
           target: { tabId: tab.id },
           files: ['content.js']
         });
       } catch (err) {
-        throw new Error('Analysis failed because the extension could not access the page.', { cause: err });
+        throw new Error('This page is protected by Chrome and cannot be summarized.', { cause: err });
       }
 
-      // Defensive check to prevent the null 'error' crash
-      if (!results || !results[0] || results[0].result === undefined) {
-        throw new Error('Content extraction returned an empty result.', { cause: new Error('Script execution returned undefined/null results array.') });
-      }
-
-      const extractionResult = results[0].result;
-      if (extractionResult.error) {
-        throw new Error('The extraction script encountered an issue with the page content.', { cause: new Error(extractionResult.error) });
-      }
+      // Wait for the message from the content script
+      const extractionResult = await extractionPromise;
 
       // 2. Send to Background for AI
       chrome.runtime.sendMessage({
