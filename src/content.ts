@@ -13,19 +13,34 @@ function extractContent() {
       };
     }
 
-    return {
+    const result = {
       title: article.title,
       textContent: article.textContent || '',
       excerpt: article.excerpt || '',
       siteName: article.siteName || '',
       length: (article.textContent || '').length
     };
+
+    // Send the result back to the popup/background
+    chrome.runtime.sendMessage({
+      type: 'CONTENT_EXTRACTED',
+      payload: result
+    });
+
+    return result;
   } catch (error) {
-    return {
+    const errorResult = {
       error: error instanceof Error ? error.message : 'Unknown error during content extraction.'
     };
+    
+    chrome.runtime.sendMessage({
+      type: 'CONTENT_EXTRACTED',
+      payload: errorResult
+    });
+
+    return errorResult;
   }
 }
 
-// Immediately execute and return the result for chrome.scripting.executeScript
+// Execute
 extractContent();
