@@ -1,5 +1,11 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+interface SummaryData {
+  bulletPoints: string[];
+  keyInsights: string[];
+  readingTime: string;
+}
+
 interface SummarizeRequest {
   type: 'SUMMARIZE_PAGE';
   payload: {
@@ -9,13 +15,18 @@ interface SummarizeRequest {
   };
 }
 
-chrome.runtime.onMessage.addListener((message: SummarizeRequest, _sender: chrome.runtime.MessageSender, sendResponse: (response?: any) => void) => {
+interface SummaryResponse extends Partial<SummaryData> {
+  error?: string;
+  cause?: string;
+}
+
+chrome.runtime.onMessage.addListener((message: SummarizeRequest, _sender: chrome.runtime.MessageSender, sendResponse: (response: SummaryResponse) => void) => {
   if (message.type === 'SUMMARIZE_PAGE') {
     handleSummarization(message.payload)
       .then(sendResponse)
-      .catch((error) => {
+      .catch((error: Error) => {
         // Send back the message and the cause if it exists for better traceability
-        const errorData: any = { error: error.message };
+        const errorData: SummaryResponse = { error: error.message };
         if (error.cause instanceof Error) {
           errorData.cause = error.cause.message;
         }
@@ -25,12 +36,12 @@ chrome.runtime.onMessage.addListener((message: SummarizeRequest, _sender: chrome
   }
 });
 
-async function handleSummarization(payload: { title: string; text: string; url: string }) {
+async function handleSummarization(payload: { title: string; text: string; url: string }): Promise<SummaryData> {
   const { title, text, url } = payload;
 
   // 1. Check Cache
   const cacheKey = `summary_${url}`;
-  let cached;
+  let cached: Record<string, SummaryData> | null = null;
   try {
     cached = await chrome.storage.local.get(cacheKey);
   } catch (error) {
@@ -81,7 +92,7 @@ async function handleSummarization(payload: { title: string; text: string; url: 
       throw new Error('AI response was not in the expected JSON format.', { cause: new Error(responseText) });
     }
     
-    const summaryData = JSON.parse(jsonMatch[0]);
+    const summaryData = JSON.parse(jsonMatch[0]) as SummaryData;
 
     // 4. Save to Cache
     try {
@@ -94,6 +105,6 @@ async function handleSummarization(payload: { title: string; text: string; url: 
   } catch (error) {
     console.error('Gemini API Error:', error);
     // Wrap the original error in a more descriptive symptom error
-    throw new Error('The AI failed to generate a summary. This could be due to a network issue or an invalid API key.', { cause: error });
+    throw new Error('The AI failed to generate a summary. This could be due to a network issue or an invalid API key.', { cause: error instanceof Error ? error : new Error(String(error)) });
   }
 }
