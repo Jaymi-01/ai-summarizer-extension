@@ -60,39 +60,59 @@ function App() {
       const tab = await getCurrentTab();
       if (!tab?.id) throw new Error('No active browser tab detected.');
 
-      // Setup a one-time listener for the content script result
+      // Setup a hybrid extraction logic (Message + Direct Return)
+      let extractionResolver: (val: ExtractionResult) => void;
+      let extractionRejecter: (err: Error) => void;
+      
       const extractionPromise = new Promise<ExtractionResult>((resolve, reject) => {
-        const listener = (message: any) => {
-          if (message.type === 'CONTENT_EXTRACTED') {
-            chrome.runtime.onMessage.removeListener(listener);
-            if (message.payload.error) {
-              reject(new Error(message.payload.error));
-            } else {
-              resolve(message.payload);
-            }
-          }
-        };
-        chrome.runtime.onMessage.addListener(listener);
-        
-        // Timeout after 5 seconds if the script doesn't respond
-        setTimeout(() => {
-          chrome.runtime.onMessage.removeListener(listener);
-          reject(new Error('Page analysis timed out. Is the page still loading?'));
-        }, 5000);
+        extractionResolver = resolve;
+        extractionRejecter = reject;
       });
+
+      const messageListener = (message: any) => {
+        if (message.type === 'CONTENT_EXTRACTED') {
+          chrome.runtime.onMessage.removeListener(messageListener);
+          if (message.payload.error) {
+            extractionRejecter(new Error(message.payload.error));
+          } else {
+            extractionResolver(message.payload);
+          }
+        }
+      };
+
+      chrome.runtime.onMessage.addListener(messageListener);
+      
+      // Timeout after 15 seconds
+      const timeoutId = setTimeout(() => {
+        chrome.runtime.onMessage.removeListener(messageListener);
+        extractionRejecter(new Error('Extraction timed out. Large pages may require more time.'));
+      }, 15000);
 
       // 1. Execute Content Script
       try {
-        await chrome.scripting.executeScript({
+        const results = await chrome.scripting.executeScript({
           target: { tabId: tab.id },
           files: ['content.js']
         });
+
+        // Use direct return if available
+        if (results && results[0] && results[0].result) {
+          const directResult = results[0].result as ExtractionResult;
+          if (!directResult.error) {
+            clearTimeout(timeoutId);
+            chrome.runtime.onMessage.removeListener(messageListener);
+            extractionResolver!(directResult);
+          }
+        }
       } catch (err) {
-        throw new Error('This page is protected by Chrome and cannot be summarized.', { cause: err });
+        clearTimeout(timeoutId);
+        chrome.runtime.onMessage.removeListener(messageListener);
+        throw new Error('This page is protected by Chrome.', { cause: err });
       }
 
       // Wait for the message from the content script
       const extractionResult = await extractionPromise;
+      clearTimeout(timeoutId);
 
       // 2. Send to Background for AI
       chrome.runtime.sendMessage({
@@ -105,16 +125,12 @@ function App() {
       }, (response: SummaryResponse) => {
         if (chrome.runtime.lastError) {
           setError('Background communication error.');
-          console.error('Runtime error:', chrome.runtime.lastError);
           setLoading(false);
           return;
         }
 
         if (response?.error) {
-          // If a cause was passed back, we log it but show the main error
-          if (response.cause) {
-            console.warn('Analysis Cause:', response.cause);
-          }
+          if (response.cause) console.warn('Analysis Cause:', response.cause);
           setError(response.error);
         } else if (response && response.bulletPoints && response.keyInsights && response.readingTime) {
           setSummary(response as SummaryData);
@@ -125,17 +141,9 @@ function App() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Analysis Error';
       setError(message);
-      
-      // Log the full error chain for debugging
       if (err instanceof Error && err.cause) {
-        console.group('Technical Root Cause');
-        console.error('Symptom:', message);
-        console.error('Cause:', err.cause);
-        console.groupEnd();
-      } else {
-        console.error('Direct Error:', err);
+        console.error('Root Cause:', err.cause);
       }
-      
       setLoading(false);
     }
   };
