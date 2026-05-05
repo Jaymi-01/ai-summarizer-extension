@@ -1,5 +1,3 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-
 interface SummaryData {
   bulletPoints: string[];
   keyInsights: string[];
@@ -25,10 +23,11 @@ chrome.runtime.onMessage.addListener((message: SummarizeRequest, _sender: chrome
     handleSummarization(message.payload)
       .then(sendResponse)
       .catch((error: Error) => {
-        // Send back the message and the cause if it exists for better traceability
         const errorData: SummaryResponse = { error: error.message };
         if (error.cause instanceof Error) {
           errorData.cause = error.cause.message;
+        } else if (error.cause) {
+          errorData.cause = String(error.cause);
         }
         sendResponse(errorData);
       });
@@ -41,37 +40,30 @@ async function handleSummarization(payload: { title: string; text: string; url: 
 
   // 1. Check Cache
   const cacheKey = `summary_${url}`;
-  let cached: { [key: string]: SummaryData } | null = null;
   try {
     const result = await chrome.storage.local.get([cacheKey]);
-    cached = result as { [key: string]: SummaryData };
+    if (result && result[cacheKey]) {
+      return result[cacheKey] as SummaryData;
+    }
   } catch (error) {
-    console.error('Cache Retrieval Error:', error);
-    // Continue without cache
-  }
-
-  if (cached && cached[cacheKey]) {
-    return cached[cacheKey];
+    console.warn('Cache Retrieval Error:', error);
   }
 
   // 2. Get API Key from environment variable
-  const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  const geminiApiKey = (process.env as any).VITE_GEMINI_API_KEY; // esbuild will replace this
   
   if (!geminiApiKey) {
-    throw new Error('Gemini API Key is not configured in the build (.env file).');
+    throw new Error('Gemini API Key is not configured.');
   }
 
-  // 3. Call Gemini
-  const genAI = new GoogleGenerativeAI(geminiApiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemma-3-27b-it' });
-
+  // 3. Call Gemini API directly via fetch (more robust for extensions)
   const prompt = `
     You are an expert content summarizer. Summarize the following web page content.
     
     Page Title: ${title}
     
     Content:
-    ${text.substring(0, 30000)} // Truncate to avoid token limits
+    ${text.substring(0, 25000)}
     
     Please provide the response in the following JSON format:
     {
@@ -80,17 +72,37 @@ async function handleSummarization(payload: { title: string; text: string; url: 
       "readingTime": "X minutes"
     }
     
-    Ensure the summary is concise and covers the main points accurately.
+    Return ONLY the JSON. No markdown formatting.
   `;
 
   try {
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemma-3-27b-it:generateContent?key=${geminiApiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{ text: prompt }]
+        }]
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`API Error: ${response.status}`, { cause: errorText });
+    }
+
+    const data = await response.json();
+    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
     
-    // Extract JSON from response (Gemini sometimes wraps in markdown code blocks)
+    if (!responseText) {
+      throw new Error('Empty response from AI.');
+    }
+    
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      throw new Error('AI response was not in the expected JSON format.', { cause: new Error(responseText) });
+      throw new Error('Failed to parse AI response as JSON.', { cause: responseText });
     }
     
     const summaryData = JSON.parse(jsonMatch[0]) as SummaryData;
@@ -105,7 +117,6 @@ async function handleSummarization(payload: { title: string; text: string; url: 
     return summaryData;
   } catch (error) {
     console.error('Gemini API Error:', error);
-    // Wrap the original error in a more descriptive symptom error
-    throw new Error('The AI failed to generate a summary. This could be due to a network issue or an invalid API key.', { cause: error instanceof Error ? error : new Error(String(error)) });
+    throw new Error('The AI failed to generate a summary.', { cause: error instanceof Error ? error : new Error(String(error)) });
   }
 }
