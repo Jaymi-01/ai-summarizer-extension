@@ -17,9 +17,6 @@ try {
     outdir: 'dist',
     minify: true,
     platform: 'browser',
-    define: {
-      'process.env.VITE_GEMINI_API_KEY': JSON.stringify(apiKey),
-    },
   });
   console.log('✅ Extension scripts built successfully.');
 } catch (error) {
