@@ -37,7 +37,7 @@ function extractContent() {
     
     chrome.runtime.sendMessage({ type: 'CONTENT_EXTRACTED', payload: result });
     return result;
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Summaize] Critical extraction error:', error);
     const err = { error: 'Extraction failed.' };
     chrome.runtime.sendMessage({ type: 'CONTENT_EXTRACTED', payload: err });
