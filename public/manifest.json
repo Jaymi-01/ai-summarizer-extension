@@ -14,9 +14,9 @@
   "action": {
     "default_popup": "index.html",
     "default_icon": {
-      "16": "favicon.svg",
-      "48": "favicon.svg",
-      "128": "favicon.svg"
+      "16": "extension-icon.png",
+      "48": "extension-icon.png",
+      "128": "extension-icon.png"
     }
   },
   "background": {
@@ -24,8 +24,8 @@
     "type": "module"
   },
   "icons": {
-    "16": "favicon.svg",
-    "48": "favicon.svg",
-    "128": "favicon.svg"
+    "16": "extension-icon.png",
+    "48": "extension-icon.png",
+    "128": "extension-icon.png"
   }
 }
