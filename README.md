@@ -18,7 +18,7 @@ If you just want to use the extension without touching any code, follow these st
 2. At the top right, turn on **Developer mode**.
 3. At the top left, click **Load unpacked**.
 4. Select the folder you unzipped in Step 1.
-5. Click the **Puzzle icon** in your toolbar and **Pin** Summaize for easy access.
+5. Click the **File icon** in your toolbar and **Pin** Summaize for easy access.
 
 ---
 
