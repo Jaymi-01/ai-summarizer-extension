@@ -69,7 +69,7 @@ function App() {
         extractionRejecter = reject;
       });
 
-      const messageListener = (message: any) => {
+      const messageListener = (message: { type: string; payload: ExtractionResult }) => {
         if (message.type === 'CONTENT_EXTRACTED') {
           chrome.runtime.onMessage.removeListener(messageListener);
           if (message.payload.error) {
@@ -104,7 +104,7 @@ function App() {
             extractionResolver!(directResult);
           }
         }
-      } catch (err) {
+      } catch (err: unknown) {
         clearTimeout(timeoutId);
         chrome.runtime.onMessage.removeListener(messageListener);
         throw new Error('This page is protected by Chrome.', { cause: err });
@@ -138,11 +138,27 @@ function App() {
         setLoading(false);
       });
 
-    } catch (err) {
+    } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Analysis Error';
       setError(message);
+      
       if (err instanceof Error && err.cause) {
-        console.error('Root Cause:', err.cause);
+        let currentCause: unknown = err.cause;
+        const causeChain: string[] = [];
+        
+        while (currentCause) {
+          if (currentCause instanceof Error) {
+            causeChain.push(currentCause.message);
+            currentCause = currentCause.cause;
+          } else {
+            causeChain.push(String(currentCause));
+            break;
+          }
+        }
+        
+        console.error('Detailed Error Chain:', message, '→', causeChain.join(' → '));
+      } else {
+        console.error('Analysis Error:', err);
       }
       setLoading(false);
     }
