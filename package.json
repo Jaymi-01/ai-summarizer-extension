@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build && pnpm build:scripts",
     "build:scripts": "node build-scripts.js",
+    "vercel-build": "echo 'Skipping extension build on Vercel'",
     "lint": "eslint .",
     "preview": "vite preview"
   },
