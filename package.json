@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && pnpm build:scripts",
+    "build:scripts": "esbuild src/background.ts src/content.ts --bundle --outdir=dist --minify --platform=browser --define:process.env.VITE_GEMINI_API_KEY=\\\"AIzaSyDBDVcXob-QTb6fIQsM0kHNwJ7URtNdRc8\\\"",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -24,6 +25,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "esbuild": "^0.28.0",
     "eslint": "^10.2.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
