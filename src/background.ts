@@ -64,8 +64,7 @@ async function handleSummarization(payload: { title: string; text: string; url: 
   }
 
   // 2. Call Vercel Backend
-  // IMPORTANT: Replace this URL with your actual Vercel deployment URL
-  const BACKEND_URL = 'https://your-vercel-project.vercel.app/api/summarize';
+  const BACKEND_URL = 'https://ai-summarizer-extension-pmuc95bp3-joels-projects-5f50f170.vercel.app/api/summarize';
 
   try {
     const response = await fetch(BACKEND_URL, {
