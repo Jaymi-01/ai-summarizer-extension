@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build && pnpm build:scripts",
+    "dev": "node api.js && vite",
+    "build": "node api.js && tsc -b && vite build && pnpm build:scripts",
     "build:scripts": "node build-scripts.js",
     "vercel-build": "echo 'Skipping extension build on Vercel'",
     "lint": "eslint .",
